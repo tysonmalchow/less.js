@@ -11,7 +11,8 @@ var args = process.argv.slice(1);
 var options = {
     compress: false,
     optimization: 1,
-    silent: false
+    silent: false,
+    watch: false
 };
 
 args = args.filter(function (arg) {
@@ -40,6 +41,10 @@ args = args.filter(function (arg) {
         case 'compress':
             options.compress = true;
             break;
+        case 'w':
+        case 'watch':
+            options.watch = true;
+            break;
         case 'O0': options.optimization = 0; break;
         case 'O1': options.optimization = 1; break;
         case 'O2': options.optimization = 2; break;
@@ -58,41 +63,128 @@ if (output && output[0] != '/') {
 var css, fd, tree;
 
 if (! input) {
-    sys.puts("lessc: no input files");
+    sys.puts("lessc: no input files or a directory");
     process.exit(1);
 }
 
-fs.stat(input, function (e, stats) {
-    if (e) {
-        sys.puts("lessc: " + e.message);
-        process.exit(1);
-    }
-    fs.open(input, process.O_RDONLY, stats.mode, function (e, fd) {
-        fs.read(fd, stats.size, 0, "utf8", function (e, data) {
-            new(less.Parser)({
-                paths: [path.dirname(input)],
-                optimization: options.optimization,
-                filename: input
-            }).parse(data, function (err, tree) {
-                if (err) {
-                    less.writeError(err, options);
-                    process.exit(1);
-                } else {
-                    try {
-                        css = tree.toCSS({ compress: options.compress });
-                        if (output) {
-                            fd = fs.openSync(output, "w");
-                            fs.writeSync(fd, css, 0, "utf8");
-                        } else {
-                            sys.print(css);
-                        }
-                    } catch (e) {
-                        less.writeError(e, options);
-                        process.exit(2);
+var mkdir = function mkdir(dir, block) {
+    var pieces = dir.split('/'), temp, base = [];
+    var next = function next() {
+        if (pieces.length) {
+            base.push(pieces.shift());
+            temp = path.join.apply(path, base);
+            if (temp.length) {
+                path.exists(temp, function (exists) {
+                    if (exists) {
+                        next();
+                    } else {
+                        fs.mkdir(temp, 0777 ^ process.umask(), function () {
+                            next();
+                        });
                     }
+                });
+            } else {
+                next();
+            }
+        } else {
+            block(dir);
+        }
+    };
+    next();
+};
+
+var compile = function compile(input, output, block) {
+    fs.stat(input, function (e, stats) {
+        if (e) {
+            sys.puts("lessc: " + e.message);
+            if (block) {
+                block(e, 0x01, input, output);
+            }
+        }
+        if (stats.isDirectory()) {
+            fs.readdir(input, function (e, files) {
+                for (var i = 0; i < files.length; i++) {
+                    compile(path.join(input, files[i]), output ? path.join(output, files[i].replace(/\.less$/i, '.css')) : null, block);
                 }
             });
-        });
+        } else {
+            fs.open(input, process.O_RDONLY, stats.mode, function (e, fd) {
+                fs.read(fd, stats.size, 0, "utf8", function (e, data) {
+                    var catcher = function catcher(err) {
+                        if ( ! err.filename || err.name === 'ParseError') {
+                            sys.puts("\033[31mlessc: In '" + input + "':\033[39m");
+                        }
+                        less.writeError(err, options);
+                        if (block) {
+                            block(err, 0x02, input, output);
+                        }
+                    };
+                    try {
+                        new(less.Parser)({
+                            paths: [path.dirname(input)],
+                            optimization: options.optimization,
+                            filename: input
+                        }).parse(data, function (err, tree) {
+                            if (err) {
+                                catcher(err);
+                            } else {
+                                css = tree.toCSS({ compress: options.compress });
+                                if (output) {
+                                    try {
+                                        mkdir(path.dirname(output), function () {
+                                            fd = fs.openSync(output, "w");
+                                            fs.writeSync(fd, css, 0, "utf8");
+                                            if (block) {
+                                                block(null, 0x00, input, output);
+                                            }
+                                        });
+                                    } catch (e) {
+                                        catcher(e);
+                                    }
+                                } else {
+                                    sys.print(css);
+                                    if (block) {
+                                        block(null, 0x00, input, output);
+                                    }
+                                }
+                            }
+                        });
+                    } catch (e) {
+                        catcher(e);
+                    }
+                });
+                if (options.watch) {
+                    watch(input, output, block);
+                }
+            });
+        }
     });
-});
+};
 
+var report = function report(err, exitCode, input, output) {
+    if (! exitCode && output) {
+        sys.puts("\033[32mlessc: Compiled '" + input + "' to '" + output + "'.\033[39m");
+    }
+};
+
+var paths = [],
+    watch = function watch(input, output, block) {
+        if (paths.indexOf(input) < 0) {
+            fs.watchFile(input, { persistent: true, interval: 500 }, function (curr, prev) {
+                if (curr.mtime.getTime() !== prev.mtime.getTime()) {
+                    compile(input, output, block);
+                }
+            });
+            paths.push(input);
+        }
+    };
+
+compile(input, output, (options.watch ? report : function (err, exitCode) {
+    if (err || exitCode) {
+        process.exit(exitCode);
+    }
+}));
+
+if (options.watch) {
+    sys.puts(">>> lessc is watching for changes. Press Ctrl-C to stop.");
+}

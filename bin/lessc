@@ -100,63 +100,64 @@ var compile = function compile(input, output, block) {
             if (block) {
                 block(e, 0x01, input, output);
             }
-        }
-        if (stats.isDirectory()) {
-            fs.readdir(input, function (e, files) {
-                for (var i = 0; i < files.length; i++) {
-                    compile(path.join(input, files[i]), output ? path.join(output, files[i].replace(/\.less$/i, '.css')) : null, block);
-                }
-            });
         } else {
-            fs.open(input, process.O_RDONLY, stats.mode, function (e, fd) {
-                fs.read(fd, stats.size, 0, "utf8", function (e, data) {
-                    var catcher = function catcher(err) {
-                        if ( ! err.filename || err.name === 'ParseError') {
-                            sys.puts("\033[31mlessc: In '" + input + "':\033[39m");
-                        }
-                        less.writeError(err, options);
-                        if (block) {
-                            block(err, 0x02, input, output);
-                        }
-                    };
-                    try {
-                        new(less.Parser)({
-                            paths: [path.dirname(input)],
-                            optimization: options.optimization,
-                            filename: input
-                        }).parse(data, function (err, tree) {
-                            if (err) {
-                                catcher(err);
-                            } else {
-                                css = tree.toCSS({ compress: options.compress });
-                                if (output) {
-                                    try {
-                                        mkdir(path.dirname(output), function () {
-                                            fd = fs.openSync(output, "w");
-                                            fs.writeSync(fd, css, 0, "utf8");
-                                            if (block) {
-                                                block(null, 0x00, input, output);
-                                            }
-                                        });
-                                    } catch (e) {
-                                        catcher(e);
-                                    }
-                                } else {
-                                    sys.print(css);
-                                    if (block) {
-                                        block(null, 0x00, input, output);
-                                    }
-                                }
-                            }
-                        });
-                    } catch (e) {
-                        catcher(e);
+            if (stats.isDirectory()) {
+                fs.readdir(input, function (e, files) {
+                    for (var i = 0; i < files.length; i++) {
+                        compile(path.join(input, files[i]), output ? path.join(output, files[i].replace(/\.less$/i, '.css')) : null, block);
                     }
                 });
-                if (options.watch) {
-                    watch(input, output, block);
-                }
-            });
+            } else {
+                fs.open(input, process.O_RDONLY, stats.mode, function (e, fd) {
+                    fs.read(fd, stats.size, 0, "utf8", function (e, data) {
+                        var catcher = function catcher(err) {
+                            if ( ! err.filename || err.name === 'ParseError') {
+                                sys.puts("\033[31mlessc: In '" + input + "':\033[39m");
+                            }
+                            less.writeError(err, options);
+                            if (block) {
+                                block(err, 0x02, input, output);
+                            }
+                        };
+                        try {
+                            new(less.Parser)({
+                                paths: [path.dirname(input)],
+                                optimization: options.optimization,
+                                filename: input
+                            }).parse(data, function (err, tree) {
+                                if (err) {
+                                    catcher(err);
+                                } else {
+                                    css = tree.toCSS({ compress: options.compress });
+                                    if (output) {
+                                        try {
+                                            mkdir(path.dirname(output), function () {
+                                                fd = fs.openSync(output, "w");
+                                                fs.writeSync(fd, css, 0, "utf8");
+                                                if (block) {
+                                                    block(null, 0x00, input, output);
+                                                }
+                                            });
+                                        } catch (e) {
+                                            catcher(e);
+                                        }
+                                    } else {
+                                        sys.print(css);
+                                        if (block) {
+                                            block(null, 0x00, input, output);
+                                        }
+                                    }
+                                }
+                            });
+                        } catch (e) {
+                            catcher(e);
+                        }
+                    });
+                    if (options.watch) {
+                        watch(input, output, block);
+                    }
+                });
+            }
         }
     });
 };

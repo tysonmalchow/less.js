@@ -133,7 +133,7 @@ var compile = function compile(input, output, block) {
                                         try {
                                             mkdir(path.dirname(output), function () {
                                                 fd = fs.openSync(output, "w");
-                                                fs.writeSync(fd, css, 0, "utf8");
+                                                fs.writeSync(fd, css || ' ', 0, "utf8");
                                                 if (block) {
                                                     block(null, 0x00, input, output);
                                                 }

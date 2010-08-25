@@ -2318,8 +2318,8 @@ function loadStyleSheets(callback, reload) {
 function loadStyleSheet(sheet, callback, reload, remaining) {
     var url       = window.location.href;
     var href      = sheet.href.replace(/\?.*$/, '');
-    var css       = cache && cache.getItem(href);
-    var timestamp = cache && cache.getItem(href + ':timestamp');
+    var css       = cache && cache.getItem(sheet.href);
+    var timestamp = cache && cache.getItem(sheet.href + ':timestamp');
     var styles    = { css: css, timestamp: timestamp };
 
     // Stylesheets in IE don't always return the full path
@@ -2406,8 +2406,8 @@ function createCSS(styles, sheet, lastModified) {
     // Don't update the local store if the file wasn't modified
     if (lastModified && cache) {
         log('saving ' + href + ' to cache.');
-        cache.setItem(href, styles);
-        cache.setItem(href + ':timestamp', lastModified);
+        cache.setItem(sheet.href, styles);
+        cache.setItem(sheet.href + ':timestamp', lastModified);
     }
 }
 

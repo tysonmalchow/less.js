@@ -30,6 +30,7 @@ fs.readdirSync('test/less').forEach(function (file) {
             else if (err) {
                 sys.print(stylize("ERROR: " + (err && err.message), 'red'));
             } else {
+                sys.print("\nExpected: " + css + "\nWas: " + less);
                 sys.print(stylize("FAIL", 'yellow'));
             }
             sys.puts("");
